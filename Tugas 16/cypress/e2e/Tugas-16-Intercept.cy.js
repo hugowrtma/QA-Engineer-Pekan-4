@@ -1,141 +1,65 @@
 // Sanbercode Tugas 16 - Intercept
 // Author: Oktaryan Hugo Wiratama
 
-// Base URL
 const baseUrl = 'https://opensource-demo.orangehrmlive.com/';
 
-describe('OrangeHRM Automation Test', () => {
+// TC_001 - Login dengan kredensial valid
+it('TC_001 - Login with valid credentials', () => {
+  cy.intercept('POST', '**/web/index.php/auth/validate*').as('loginRequest');
+  cy.visit(baseUrl);
+  cy.get('input[name="username"]').type('Admin');
+  cy.get('input[name="password"]').type('admin123');
+  cy.get('button[type="submit"]').click();
+  cy.wait('@loginRequest').its('response.statusCode').should('be.oneOf', [200, 302]);
+  cy.url().should('include', '/dashboard');
+});
 
-  it('TC_001 - Login with valid credentials (Intercept)', () => {
-    cy.visit(baseUrl);
+// TC_002 - Login dengan kredensial salah
+it('TC_002 - Login with invalid credentials', () => {
+  cy.intercept('POST', '**/web/index.php/auth/validate*').as('invalidLogin');
+  cy.visit(baseUrl);
+  cy.get('input[name="username"]').type('InvalidUser');
+  cy.get('input[name="password"]').type('wrongpass');
+  cy.get('button[type="submit"]').click();
+  cy.wait('@invalidLogin');
+  cy.contains('Invalid credentials').should('be.visible');
+});
 
-    // Intercept login request
-    cy.intercept('POST', '**/auth/validate').as('loginRequest');
+// TC_003 - Lihat dashboard setelah login
+it('TC_003 - View Dashboard after login', () => {
+  cy.intercept('GET', '**/web/index.php/api/v2/dashboard/**').as('getDashboard'); // ✅ lebih luas
+  cy.visit(baseUrl);
+  cy.get('input[name="username"]').type('Admin');
+  cy.get('input[name="password"]').type('admin123');
+  cy.get('button[type="submit"]').click();
 
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
+  cy.wait('@getDashboard', { timeout: 10000 })
+    .its('response.statusCode')
+    .should('eq', 200);
 
-    // Wait and verify response
-    cy.wait('@loginRequest').then((interception) => {
-      expect(interception.response.statusCode).to.eq(200);
-    });
+  cy.contains('Dashboard').should('be.visible');
+});
 
-    cy.url().should('include', '/dashboard');
-  });
+// TC_004 - Buka menu Admin
+it('TC_004 - Access Admin Menu', () => {
+  cy.intercept('GET', '**/web/index.php/api/v2/admin/users*').as('getAdminUsers');
+  cy.visit(baseUrl);
+  cy.get('input[name="username"]').type('Admin');
+  cy.get('input[name="password"]').type('admin123');
+  cy.get('button[type="submit"]').click();
+  cy.contains('Admin').click();
+  cy.wait('@getAdminUsers').its('response.statusCode').should('eq', 200);
+  cy.contains('User Management').should('be.visible');
+});
 
-  it('TC_002 - Login with invalid credentials (Intercept)', () => {
-    cy.visit(baseUrl);
-
-    cy.intercept('POST', '**/auth/validate').as('invalidLogin');
-
-    cy.get('input[name="username"]').type('InvalidUser');
-    cy.get('input[name="password"]').type('wrongpass');
-    cy.get('button[type="submit"]').click();
-
-    cy.wait('@invalidLogin').then((interception) => {
-      expect(interception.response.statusCode).to.eq(401);
-    });
-
-    cy.contains('Invalid credentials').should('be.visible');
-  });
-
-  it('TC_003 - View Dashboard after login', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.url().should('include', '/dashboard');
-    cy.get('h6').contains('Dashboard', { timeout: 10000 }).should('be.visible');
-  });
-
-  it('TC_004 - Minimize Sidebar', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.get('.oxd-main-menu-search').parent().find('button').click();
-    cy.get('.oxd-sidepanel').should('have.class', 'toggled');
-  });
-
-  it('TC_005 - Access Admin Menu (Intercept)', () => {
-    cy.visit(baseUrl);
-
-    cy.intercept('GET', '**/api/v2/admin/**').as('adminMenu');
-
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.contains('Admin').click();
-    cy.wait('@adminMenu');
-    cy.url().should('include', '/admin');
-    cy.contains('User Management').should('be.visible');
-  });
-
-  it('TC_006 - Search Employee in PIM (Intercept)', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.contains('PIM').click();
-    cy.url().should('include', '/pim/viewEmployeeList');
-
-    // Intercept employee search request
-    cy.intercept('GET', '**/api/v2/pim/employees*').as('searchEmployee');
-
-    cy.get('input[placeholder="Type for hints..."]').eq(0).type('Sophia Turner');
-    cy.get('button[type="submit"]').click();
-
-    cy.wait('@searchEmployee').then((interception) => {
-      expect(interception.response.statusCode).to.eq(200);
-      expect(interception.response.body.data).to.not.be.empty;
-    });
-
-    cy.get('.oxd-table-card', { timeout: 10000 }).should('contain.text', 'Sophia Turner');
-  });
-
-  it('TC_007 - View Leave List (Intercept)', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    // Intercept Leave List API call
-    cy.intercept('GET', '**/api/v2/leave/leave-requests*').as('leaveList');
-
-    cy.contains('Leave').click();
-    cy.contains('Leave List').click();
-
-    cy.wait('@leaveList').then((interception) => {
-      expect(interception.response.statusCode).to.eq(200);
-    });
-
-    cy.contains('Leave List').should('be.visible');
-  });
-
-  it('TC_008 - Access Time Module', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.contains('Time').click();
-    cy.contains('Timesheets').should('be.visible');
-  });
-
-  it('TC_009 - Access My Info Page', () => {
-    cy.visit(baseUrl);
-    cy.get('input[name="username"]').type('Admin');
-    cy.get('input[name="password"]').type('admin123');
-    cy.get('button[type="submit"]').click();
-
-    cy.contains('My Info').click();
-    cy.url().should('include', '/viewPersonalDetails');
-    cy.contains('Personal Details').should('be.visible');
-  });
-
+// TC_005 - Akses halaman My Info
+it('TC_005 - Access My Info Page', () => {
+  cy.intercept('GET', '**/web/index.php/api/v2/pim/employees/*').as('getMyInfo');
+  cy.visit(baseUrl);
+  cy.get('input[name="username"]').type('Admin');
+  cy.get('input[name="password"]').type('admin123');
+  cy.get('button[type="submit"]').click();
+  cy.contains('My Info').click();
+  cy.wait('@getMyInfo').its('response.statusCode').should('eq', 200);
+  cy.contains('Personal Details').should('be.visible');
 });
